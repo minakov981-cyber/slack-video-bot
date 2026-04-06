@@ -5,26 +5,12 @@ from flask import Flask, request
 import yt_dlp
 from dotenv import load_dotenv
 
-# 🔐 Завантажуємо змінні середовища
+# 🔐 env
 load_dotenv()
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "Bot is alive 🚀"
-
-# ⬇️ ОТ СЮДИ ДОДАЙ
-@app.route("/slack/events", methods=["POST"])
-def slack_events():
-    data = request.json
-
-    if data.get("type") == "url_verification":
-        return data.get("challenge"), 200
-
-    return "OK", 200
-
-# 🔑 Беремо токен з .env
+# 🔑 TOKEN
 SLACK_BOT_TOKEN = os.getenv("SLACK_TOKEN")
 
 if not SLACK_BOT_TOKEN:
@@ -34,7 +20,12 @@ DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 
-# 📥 Скачування відео
+@app.route("/")
+def home():
+    return "Bot is alive 🚀"
+
+
+# 📥 Скачування
 def download_video(url):
     ydl_opts = {
         'outtmpl': f'{DOWNLOAD_FOLDER}/%(title)s.%(ext)s',
@@ -46,62 +37,23 @@ def download_video(url):
         return ydl.prepare_filename(info)
 
 
-# 📤 Завантаження у Slack
-def upload_to_slack(filepath, channel_id):
-    filename = os.path.basename(filepath)
-    filesize = os.path.getsize(filepath)
-
-    # STEP 1: отримати upload URL
-    res = requests.post(
-        "https://slack.com/api/files.getUploadURLExternal",
-        headers={
-            "Authorization": f"Bearer {SLACK_BOT_TOKEN}"
-        },
-        data={
-            "filename": filename,
-            "length": filesize
-        }
-    )
-
-    data_res = res.json()
-    print("STEP 1:", data_res)
-
-    if not data_res.get("ok"):
-        print("❌ Slack error STEP1:", data_res)
-        return
-
-    upload_url = data_res["upload_url"]
-    file_id = data_res["file_id"]
-
-    # STEP 2: upload файл
-    with open(filepath, "rb") as f:
-        requests.post(upload_url, files={"file": f})
-
-    # STEP 3: завершити upload
-    res2 = requests.post(
-        "https://slack.com/api/files.completeUploadExternal",
-        headers={
-            "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "files": [
-                {
-                    "id": file_id,
-                    "title": filename
-                }
-            ],
-            "channel_id": channel_id
-        }
-    )
-
-    print("STEP 3:", res2.json())
+# 📤 Простий upload (працює стабільно)
+def upload_to_slack(file_path, channel):
+    with open(file_path, "rb") as f:
+        requests.post(
+            "https://slack.com/api/files.upload",
+            headers={
+                "Authorization": f"Bearer {SLACK_BOT_TOKEN}"
+            },
+            files={"file": f},
+            data={"channels": channel}
+        )
 
 
 # 🔥 Фоновий процес
-def process_video(url, channel_id):
+def process_video(url, channel):
     try:
-        # повідомлення в Slack
+        # повідомлення "качаю"
         requests.post(
             "https://slack.com/api/chat.postMessage",
             headers={
@@ -109,34 +61,49 @@ def process_video(url, channel_id):
                 "Content-Type": "application/json"
             },
             json={
-                "channel": channel_id,
+                "channel": channel,
                 "text": "⏳ Downloading video..."
             }
         )
 
         filepath = download_video(url)
 
-        upload_to_slack(filepath, channel_id)
+        upload_to_slack(filepath, channel)
 
     except Exception as e:
         print("❌ ERROR:", e)
 
 
-# ⚡ Slack endpoint
-@app.route("/download", methods=["POST"])
-def slack_download():
-    url = request.form.get("text")
-    channel_id = request.form.get("channel_id")
+# ⚡ Slack events (ГОЛОВНЕ)
+@app.route("/slack/events", methods=["POST"])
+def slack_events():
+    data = request.json
 
-    if not url:
-        return "No URL provided", 200
+    # verification
+    if data.get("type") == "url_verification":
+        return data.get("challenge"), 200
 
-    # запускаємо у фоні
-    threading.Thread(target=process_video, args=(url, channel_id)).start()
+    if "event" in data:
+        event = data["event"]
 
-    return "Processing...", 200
+        # ігноримо самого бота
+        if event.get("bot_id"):
+            return "OK", 200
+
+        text = event.get("text")
+        channel = event.get("channel")
+
+        print("MESSAGE:", text)
+
+        # якщо є лінк
+        if text and "http" in text:
+            threading.Thread(
+                target=process_video,
+                args=(text, channel)
+            ).start()
+
+    return "OK", 200
 
 
-# ▶ запуск
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3000)
