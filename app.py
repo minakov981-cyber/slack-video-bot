@@ -10,6 +10,10 @@ load_dotenv()
 
 app = Flask(__name__)
 
+@app.route("/")
+def home():
+    return "Bot is alive 🚀"
+
 # 🔑 Беремо токен з .env
 SLACK_BOT_TOKEN = os.getenv("SLACK_TOKEN")
 
