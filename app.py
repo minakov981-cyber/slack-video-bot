@@ -24,6 +24,31 @@ os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 def home():
     return "Bot is alive 🚀"
 
+# ⬇️ ОЦЕ ДОДАЄШ ТУТ
+@app.route("/download", methods=["POST"])
+def slack_download():
+    print("🔥 /download HIT")
+    print("FORM DATA:", request.form)
+
+    url = request.form.get("text")
+    channel = request.form.get("channel_id") or request.form.get("channel")
+
+    if not url:
+        return {
+            "response_type": "ephemeral",
+            "text": "❌ No URL provided"
+        }, 200
+
+    threading.Thread(
+        target=process_video,
+        args=(url, channel)
+    ).start()
+
+    return {
+        "response_type": "ephemeral",
+        "text": "⏳ Processing your video..."
+    }, 200
+
 
 # 📥 Скачування
 def download_video(url):
