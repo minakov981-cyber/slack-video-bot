@@ -64,8 +64,10 @@ def download_video(url):
 
 # 📤 Простий upload (працює стабільно)
 def upload_to_slack(file_path, channel):
+    print("📤 UPLOADING:", file_path)
+
     with open(file_path, "rb") as f:
-        requests.post(
+        res = requests.post(
             "https://slack.com/api/files.upload",
             headers={
                 "Authorization": f"Bearer {SLACK_BOT_TOKEN}"
@@ -73,6 +75,8 @@ def upload_to_slack(file_path, channel):
             files={"file": f},
             data={"channels": channel}
         )
+
+    print("📤 SLACK RESPONSE:", res.text)        )
 
 
 # 🔥 Фоновий процес
