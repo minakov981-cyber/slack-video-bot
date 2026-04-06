@@ -14,6 +14,16 @@ app = Flask(__name__)
 def home():
     return "Bot is alive 🚀"
 
+# ⬇️ ОТ СЮДИ ДОДАЙ
+@app.route("/slack/events", methods=["POST"])
+def slack_events():
+    data = request.json
+
+    if data.get("type") == "url_verification":
+        return data.get("challenge"), 200
+
+    return "OK", 200
+
 # 🔑 Беремо токен з .env
 SLACK_BOT_TOKEN = os.getenv("SLACK_TOKEN")
 
