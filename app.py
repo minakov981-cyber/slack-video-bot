@@ -63,21 +63,55 @@ def download_video(url):
 
 
 # 📤 Простий upload (працює стабільно)
-def upload_to_slack(file_path, channel):
-    print("📤 UPLOADING:", file_path)
+def upload_to_slack(filepath, channel_id):
+    filename = os.path.basename(filepath)
+    filesize = os.path.getsize(filepath)
 
-    with open(file_path, "rb") as f:
-        res = requests.post(
-            "https://slack.com/api/files.upload",
-            headers={
-                "Authorization": f"Bearer {SLACK_BOT_TOKEN}"
-            },
-            files={"file": f},
-            data={"channels": channel}
-        )
+    # STEP 1
+    res = requests.post(
+        "https://slack.com/api/files.getUploadURLExternal",
+        headers={
+            "Authorization": f"Bearer {SLACK_BOT_TOKEN}"
+        },
+        data={
+            "filename": filename,
+            "length": filesize
+        }
+    )
 
-    print("📤 SLACK RESPONSE:", res.text)
+    data_res = res.json()
+    print("STEP 1:", data_res)
 
+    if not data_res.get("ok"):
+        print("❌ ERROR STEP 1:", data_res)
+        return
+
+    upload_url = data_res["upload_url"]
+    file_id = data_res["file_id"]
+
+    # STEP 2
+    with open(filepath, "rb") as f:
+        requests.post(upload_url, files={"file": f})
+
+    # STEP 3
+    res2 = requests.post(
+        "https://slack.com/api/files.completeUploadExternal",
+        headers={
+            "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "files": [
+                {
+                    "id": file_id,
+                    "title": filename
+                }
+            ],
+            "channel_id": channel_id
+        }
+    )
+
+    print("STEP 3:", res2.json())
 
 # 🔥 Фоновий процес
 def process_video(url, channel):
