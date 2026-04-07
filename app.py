@@ -76,7 +76,7 @@ def upload_to_slack(file_path, channel):
             data={"channels": channel}
         )
 
-    print("📤 SLACK RESPONSE:", res.text)        )
+    print("📤 SLACK RESPONSE:", res.text)
 
 
 # 🔥 Фоновий процес
