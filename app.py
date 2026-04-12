@@ -52,15 +52,23 @@ def slack_download():
 
 # 📥 Скачування
 def download_video(url):
+
+    # 👇 ДОДАЙ ОЦЕ СЮДИ
+    print("FILES IN ROOT:", os.listdir("."))
+    print("COOKIES EXISTS:", os.path.exists("cookies.txt"))
+
     ydl_opts = {
         'outtmpl': f'{DOWNLOAD_FOLDER}/%(title)s.%(ext)s',
-        'format': 'mp4'
+        'format': 'mp4',
+        'cookiefile': 'cookies.txt',
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        }
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
-
 
 # 📤 Простий upload (працює стабільно)
 def upload_to_slack(filepath, channel_id):
