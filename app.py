@@ -47,7 +47,7 @@ def slack_download():
 
     return {
         "response_type": "ephemeral",
-        "text": "⏳ Processing your video..."
+        "text": "⏳ Processing..."
     }, 200
 
 
@@ -67,8 +67,8 @@ def download_video(url):
         return ydl.prepare_filename(info)
 
 
-# 📤 Upload to Slack (new API)
-def upload_to_slack(filepath, channel_id):
+# 📤 Upload to Slack (FINAL VERSION)
+def upload_to_slack(filepath, channel_id, original_url):
     filename = os.path.basename(filepath)
     filesize = os.path.getsize(filepath)
 
@@ -98,7 +98,7 @@ def upload_to_slack(filepath, channel_id):
     with open(filepath, "rb") as f:
         requests.post(upload_url, files={"file": f})
 
-    # STEP 3
+    # STEP 3 (🔥 головне — initial_comment)
     res2 = requests.post(
         "https://slack.com/api/files.completeUploadExternal",
         headers={
@@ -112,7 +112,8 @@ def upload_to_slack(filepath, channel_id):
                     "title": filename
                 }
             ],
-            "channel_id": channel_id
+            "channel_id": channel_id,
+            "initial_comment": f"🔗 Original video:\n{original_url}"
         }
     )
 
@@ -122,28 +123,15 @@ def upload_to_slack(filepath, channel_id):
 # 🔥 Main logic
 def process_video(url, channel):
     try:
-        # ✅ фінальне повідомлення (оновлене)
-        requests.post(
-            "https://slack.com/api/chat.postMessage",
-            headers={
-                "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "channel": channel,
-                "text": f"🎬 Processing your video...\n🔗 Original: {url}"
-            }
-        )
-
         filepath = download_video(url)
 
-        upload_to_slack(filepath, channel)
+        upload_to_slack(filepath, channel, url)
 
     except Exception as e:
         print("❌ ERROR:", e)
 
 
-# ⚡ Events (опціонально)
+# ⚡ Events (optional)
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
     data = request.json
