@@ -24,7 +24,8 @@ os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 def home():
     return "Bot is alive 🚀"
 
-# ⬇️ ОЦЕ ДОДАЄШ ТУТ
+
+# 🔽 Slash command
 @app.route("/download", methods=["POST"])
 def slack_download():
     print("🔥 /download HIT")
@@ -50,13 +51,8 @@ def slack_download():
     }, 200
 
 
-# 📥 Скачування
+# 📥 Download video
 def download_video(url):
-
-    # 👇 ДОДАЙ ОЦЕ СЮДИ
-    print("FILES IN ROOT:", os.listdir("."))
-    print("COOKIES EXISTS:", os.path.exists("cookies.txt"))
-
     ydl_opts = {
         'outtmpl': f'{DOWNLOAD_FOLDER}/%(title)s.%(ext)s',
         'format': 'mp4',
@@ -70,7 +66,8 @@ def download_video(url):
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
 
-# 📤 Простий upload (працює стабільно)
+
+# 📤 Upload to Slack (new API)
 def upload_to_slack(filepath, channel_id):
     filename = os.path.basename(filepath)
     filesize = os.path.getsize(filepath)
@@ -121,10 +118,11 @@ def upload_to_slack(filepath, channel_id):
 
     print("STEP 3:", res2.json())
 
-# 🔥 Фоновий процес
+
+# 🔥 Main logic
 def process_video(url, channel):
     try:
-        # повідомлення "качаю"
+        # ✅ фінальне повідомлення (оновлене)
         requests.post(
             "https://slack.com/api/chat.postMessage",
             headers={
@@ -133,7 +131,7 @@ def process_video(url, channel):
             },
             json={
                 "channel": channel,
-                "text": "⏳ Downloading video..."
+                "text": f"🎬 Processing your video...\n🔗 Original: {url}"
             }
         )
 
@@ -145,19 +143,17 @@ def process_video(url, channel):
         print("❌ ERROR:", e)
 
 
-# ⚡ Slack events (ГОЛОВНЕ)
+# ⚡ Events (опціонально)
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
     data = request.json
 
-    # verification
     if data.get("type") == "url_verification":
         return data.get("challenge"), 200
 
     if "event" in data:
         event = data["event"]
 
-        # ігноримо самого бота
         if event.get("bot_id"):
             return "OK", 200
 
@@ -166,7 +162,6 @@ def slack_events():
 
         print("MESSAGE:", text)
 
-        # якщо є лінк
         if text and "http" in text:
             threading.Thread(
                 target=process_video,
@@ -177,4 +172,5 @@ def slack_events():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3000)
+    port = int(os.environ.get("PORT", 3000))
+    app.run(host="0.0.0.0", port=port)
