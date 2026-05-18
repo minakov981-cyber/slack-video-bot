@@ -112,7 +112,7 @@ def upload_to_slack(filepath, channel_id, original_url):
                     "title": filename
                 }
             ],
-            "channel_id": channel_id,
+            "channels": [channel_id],
             "initial_comment": f"🔗 Original video:\n{original_url}"
         }
     )
