@@ -1,3 +1,4 @@
+python
 import os
 import requests
 import threading
@@ -5,17 +6,18 @@ from flask import Flask, request
 import yt_dlp
 from dotenv import load_dotenv
 
-# 🔐 env
+# 🔐 Load ENV
 load_dotenv()
 
 app = Flask(__name__)
 
-# 🔑 TOKEN
+# 🔑 Slack Token
 SLACK_BOT_TOKEN = os.getenv("SLACK_TOKEN")
 
 if not SLACK_BOT_TOKEN:
     raise ValueError("❌ SLACK_TOKEN not found in .env file")
 
+# 📁 Downloads folder
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -32,7 +34,7 @@ def slack_download():
     print("FORM DATA:", request.form)
 
     url = request.form.get("text")
-    channel = request.form.get("channel_id") or request.form.get("channel")
+    user_id = request.form.get("user_id")
 
     if not url:
         return {
@@ -42,7 +44,7 @@ def slack_download():
 
     threading.Thread(
         target=process_video,
-        args=(url, channel)
+        args=(url, user_id)
     ).start()
 
     return {
@@ -54,11 +56,11 @@ def slack_download():
 # 📥 Download video
 def download_video(url):
     ydl_opts = {
-        'outtmpl': f'{DOWNLOAD_FOLDER}/%(title)s.%(ext)s',
-        'format': 'mp4',
-        'cookiefile': 'cookies.txt',
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
+        "format": "mp4",
+        "cookiefile": "cookies.txt",
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0"
         }
     }
 
@@ -67,12 +69,12 @@ def download_video(url):
         return ydl.prepare_filename(info)
 
 
-# 📤 Upload to Slack (FINAL VERSION)
-def upload_to_slack(filepath, channel_id, original_url):
+# 📤 Upload to Slack
+def upload_to_slack(filepath, user_id, original_url):
     filename = os.path.basename(filepath)
     filesize = os.path.getsize(filepath)
 
-    # STEP 1
+    # STEP 1 — get upload URL
     res = requests.post(
         "https://slack.com/api/files.getUploadURLExternal",
         headers={
@@ -94,11 +96,34 @@ def upload_to_slack(filepath, channel_id, original_url):
     upload_url = data_res["upload_url"]
     file_id = data_res["file_id"]
 
-    # STEP 2
+    # STEP 2 — upload binary
     with open(filepath, "rb") as f:
-        requests.post(upload_url, files={"file": f})
+        upload_res = requests.post(upload_url, files={"file": f})
 
-    # STEP 3 (🔥 головне — initial_comment)
+    print("STEP 2 STATUS:", upload_res.status_code)
+
+    # STEP 3 — open DM
+    dm_res = requests.post(
+        "https://slack.com/api/conversations.open",
+        headers={
+            "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "users": user_id
+        }
+    )
+
+    dm_data = dm_res.json()
+    print("DM OPEN:", dm_data)
+
+    if not dm_data.get("ok"):
+        print("❌ ERROR OPEN DM:", dm_data)
+        return
+
+    real_channel = dm_data["channel"]["id"]
+
+    # STEP 4 — finalize upload
     res2 = requests.post(
         "https://slack.com/api/files.completeUploadExternal",
         headers={
@@ -112,48 +137,51 @@ def upload_to_slack(filepath, channel_id, original_url):
                     "title": filename
                 }
             ],
-            "channels": [channel_id],
+            "channel_id": real_channel,
             "initial_comment": f"🔗 Original video:\n{original_url}"
         }
     )
 
-    print("STEP 3:", res2.json())
+    print("STEP 4:", res2.json())
 
 
 # 🔥 Main logic
-def process_video(url, channel):
+def process_video(url, user_id):
     try:
         filepath = download_video(url)
 
-        upload_to_slack(filepath, channel, url)
+        upload_to_slack(filepath, user_id, url)
 
     except Exception as e:
         print("❌ ERROR:", e)
 
 
-# ⚡ Events (optional)
+# ⚡ Slack Events
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
     data = request.json
 
+    # Slack verification
     if data.get("type") == "url_verification":
         return data.get("challenge"), 200
 
     if "event" in data:
         event = data["event"]
 
+        # Ignore bot messages
         if event.get("bot_id"):
             return "OK", 200
 
         text = event.get("text")
-        channel = event.get("channel")
+        user_id = event.get("user")
 
         print("MESSAGE:", text)
 
+        # If message contains URL
         if text and "http" in text:
             threading.Thread(
                 target=process_video,
-                args=(text, channel)
+                args=(text, user_id)
             ).start()
 
     return "OK", 200
